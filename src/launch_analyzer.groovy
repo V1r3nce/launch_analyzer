@@ -110,7 +110,7 @@ pipeline {
                                 export PYTHONPATH=$PWD && \
                                 python ${WORKSPACE}/scripts/confluence/report_to_confluence.py \
                                 ${uds_line} \
-                                ${delivery_line}
+                                ${delivery_line}'
                             """
                         )
                     }
