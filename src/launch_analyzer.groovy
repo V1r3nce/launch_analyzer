@@ -69,9 +69,7 @@ pipeline {
         stage ('Get Launch Analyzer') {
             steps {
                 echo '--- Get UI Tests ---'
-                dir("launch_analyzer") {
-                    git branch: 'master', credentialsId: 'mops_ssh', url: "ssh://git@gitlab.nexign.com:2222/products/uds/launch_analyzer.git"
-                }
+                git branch: 'master', credentialsId: 'mops_ssh', url: "ssh://git@gitlab.nexign.com:2222/products/uds/launch_analyzer.git"
             }
         }
         stage("Run script") {
