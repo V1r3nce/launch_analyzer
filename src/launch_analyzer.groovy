@@ -70,7 +70,7 @@ pipeline {
             steps {
                 echo '--- Get UI Tests ---'
                 dir("launch-analyzer") {
-                    git branch: 'master', credentialsId: 'rm_tech_user', url: "ssh://git@gitlab.nexign.com:2222/products/uds/launch-analyzer.git"
+                    git branch: 'master', credentialsId: 'mops_ssh', url: "ssh://git@gitlab.nexign.com:2222/products/uds/launch_analyzer.git"
                 }
             }
         }
