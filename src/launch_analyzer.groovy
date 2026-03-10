@@ -69,9 +69,7 @@ pipeline {
         stage ('Get Launch Analyzer') {
             steps {
                 echo '--- Get UI Tests ---'
-                dir("launch_analyzer") {
-                    git branch: 'master', credentialsId: 'mops_ssh', url: "ssh://git@gitlab.nexign.com:2222/products/uds/launch_analyzer.git"
-                }
+                git branch: 'master', credentialsId: 'mops_ssh', url: "ssh://git@gitlab.nexign.com:2222/products/uds/launch_analyzer.git"
             }
         }
         stage("Run script") {
@@ -86,7 +84,6 @@ pipeline {
                         ' -e PYTHONUNBUFFERED=1'
                         ) {
                         sh """
-                            cd launch_analyzer
                             pip install --no-cache-dir --index-url ${PIP_INDEX_URL} -r requirements.txt
                         """
                         def uds_line = ""
@@ -106,9 +103,8 @@ pipeline {
                             returnStatus: true,
                             script: """
                                 /bin/bash -c 'set -o pipefail; \
-                                cd launch_analyzer && \
-                                export PYTHONPATH=$PWD && \
-                                python ./scripts/confluence/report_to_confluence.py \
+                                export PYTHONPATH=${WORKSPACE} && \
+                                python ${WORKSPACE}/scripts/confluence/report_to_confluence.py \
                                 ${uds_line} \
                                 ${delivery_line}'
                             """
