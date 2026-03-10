@@ -56,12 +56,7 @@ pipeline {
         stage('Set build name') {
             steps {
                 script {
-                    if (params.use_openvpn == true) {
-                        currentBuild.displayName = "#${BUILD_NUMBER} ${CLONE_NAME}"
-                    }
-                    else {
-                        currentBuild.displayName = "#${BUILD_NUMBER} ${SOLO_STAND}"
-                    }
+                    currentBuild.displayName = "#${BUILD_NUMBER}"
                 }
             }
         }
