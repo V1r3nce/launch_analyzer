@@ -2,6 +2,12 @@
 
 def PIP_INDEX_URL="https://artifactory.nexign.com/artifactory/api/pypi/pypi/simple"
 
+def agent_label = '(woi-rhel8 && docker) || woi-tmp-rhel8-docker'
+
+// Идентификатор (ID) credentials для Git в Jenkins
+def git_credentials_id = 'mops_ssh'
+
+
 // == Константы для стиля разделителей в параметрах сборки ==
 
 def separator_section_header_style = """
