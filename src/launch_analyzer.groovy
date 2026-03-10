@@ -107,7 +107,7 @@ pipeline {
                                 /bin/bash -c 'set -o pipefail; \
                                 cd launch-analyzer && \
                                 export PYTHONPATH=$PWD && \
-                                python .\scripts\confluence\report_to_confluence.py \
+                                python ./scripts/confluence/report_to_confluence.py \
                                 ${uds_line} \
                                 ${delivery_line}
                             """
