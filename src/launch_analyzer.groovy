@@ -1,5 +1,7 @@
 // == Параметры для настройки под проект ==
 
+def PIP_INDEX_URL="https://artifactory.nexign.com/artifactory/api/pypi/pypi/simple"
+
 // == Константы для стиля разделителей в параметрах сборки ==
 
 def separator_section_header_style = """
@@ -74,7 +76,7 @@ pipeline {
         stage("Run script") {
             steps {
                 script {
-                    docker.image('docker.nexign.com/playwright/python:latest').inside(' --privileged'+
+                    docker.image('docker.nexign.com/library/python:3.12-slim').inside(' --privileged'+
                         ' -u root' +
                         ' -e SHELL=/bin/bash' +
                         ' --dns-search=billing.ru' +
