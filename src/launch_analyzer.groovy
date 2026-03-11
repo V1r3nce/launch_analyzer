@@ -44,7 +44,7 @@ pipeline {
     }
     environment{
         ALLURE_ENDPOINT      = "https://allure.nexign.com"
-        ALLURE_TOKEN         = credentials('TESTOPS_TOKEN')
+        ALLURE_TOKEN         = credentials('tech_launch_analyzer')
         CONFLUENCE_ENDPOINT  = "https://confluence.nexign.com/"
         CONFLUENCE_PAGE_ID   = "${CONFLUENCE_PARENT_PAGE_ID}"
         CONFLUENCE_USER      = credentials('CONFLUENCE_USER')
