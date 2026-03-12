@@ -96,7 +96,7 @@ pipeline {
 
                         def delivery_line = ""
                         if (params.URL_DELIVERY_launch.isEmpty() || params.ID_DELIVERY_launch.isEmpty()) {
-                            delivery_line = (params.URL_DELIVERY_launch.isEmpty()) ? "--launch_id_uds ${params.ID_DELIVERY_launch}" : "--launch_url_uds ${params.URL_DELIVERY_launch}"
+                            delivery_line = (params.URL_DELIVERY_launch.isEmpty()) ? "--launch_id_delivery ${params.ID_DELIVERY_launch}" : "--launch_url_delivery ${params.URL_DELIVERY_launch}"
                         }
                         def exitCodeCore  = sh (
                             label: "Run core script",
