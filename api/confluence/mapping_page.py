@@ -1,5 +1,6 @@
-"""Обновление страницы маппинга требований и тестов в Confluence."""
-from typing import Any, Dict, List
+"""Точечное обновление колонок «Ссылка на тест-кейсы в Allure» и «Маппинг требований и тестов»."""
+from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlparse
 
 from atlassian import Confluence
 from bs4 import BeautifulSoup
@@ -13,15 +14,11 @@ class MappingConfluencePage:
     CONFLUENCE_USERNAME = get_var_from_env("CONFLUENCE_USERNAME")
     CONFLUENCE_PASSWORD = get_var_from_env("CONFLUENCE_PASSWORD")
 
-    HEADERS = [
-        "Фича",
-        "Ссылка на документацию КР/ГФС",
-        "Автор документации",
-        "Ссылка на тест-кейсы в Allure",
-        "Автор тест-кейсов",
-        "Статус",
-        "Маппинг требований и тестов",
-    ]
+    # Сколько колонок ожидаем в строке (из шапки страницы):
+    # Фича | Док КР/ГФС | Автор док | Ссылка на тест-кейсы в Allure | Автор кейсов | Статус | Маппинг
+    EXPECTED_COLUMNS = 7
+    SUITE_URL_COLUMN_INDEX = 3   # 4-я колонка
+    MAPPING_COLUMN_INDEX = -1    # последняя
 
     def __init__(self, parent_id: int) -> None:
         self.page_id = int(parent_id)
@@ -39,121 +36,143 @@ class MappingConfluencePage:
         self.body = str(page["body"]["storage"]["value"])
         self.soup = BeautifulSoup(self.body, "html.parser")
 
-    @staticmethod
-    def _group_by_feature(rows: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        """{feature_key: [rows...]} — все строки одной фичи в одну группу."""
-        grouped: Dict[str, List[Dict[str, Any]]] = {}
-        for row in rows:
-            key = (row.get("feature") or {}).get("key") or "—"
-            grouped.setdefault(key, []).append(row)
-        return grouped
-
     def build_body(self, mapping_rows: List[Dict[str, Any]]) -> str:
-        """Собирает HTML с одной таблицей-маппингом (7 колонок, шапка + строки по фичам)."""
-        soup = BeautifulSoup("<div></div>", "html.parser")
-        root = soup.div
+        """
+        В существующем теле страницы для каждого --suite_url найти строку
+        по ссылке на документацию КР/ГФС (берём из first_case.doc_links[0].url),
+        в этой строке:
+          • записать suite_url в колонку «Ссылка на тест-кейсы в Allure» (4-я);
+          • заменить колонку «Маппинг требований и тестов» (последняя) нашей таблицей
+            Тэг | Требование из ГФС | Ссылка на тест-кейс.
 
-        table = soup.new_tag("table", **{"class": "wrapped confluenceTable"})
-        tbody = soup.new_tag("tbody")
+        Остальные ячейки и остальные строки не трогаем.
+        Если по какому-то suite_url строка не нашлась — кидаем ошибку.
+        """
+        by_suite: Dict[str, List[Dict[str, Any]]] = {}
+        for row in mapping_rows:
+            by_suite.setdefault(row.get("suite_url", ""), []).append(row)
 
-        header_tr = soup.new_tag("tr")
-        for col in self.HEADERS:
+        problems: List[str] = []
+        for suite_url, rows in by_suite.items():
+            doc_urls = self._collect_doc_urls(rows)
+            if not doc_urls:
+                problems.append(
+                    f"{suite_url}: у кейсов нет ссылок на документацию (links[] пустой)"
+                )
+                continue
+
+            target_a = None
+            for doc_url in doc_urls:
+                target_a = self._find_anchor_by_url(doc_url)
+                if target_a is not None:
+                    break
+            if target_a is None:
+                problems.append(
+                    f"{suite_url}: ни одна из {len(doc_urls)} ссылок на страницу не нашлась: "
+                    + ", ".join(doc_urls)
+                )
+                continue
+            tr = target_a.find_parent("tr")
+            if tr is None:
+                problems.append(f"{suite_url}: <a> найден, но не внутри <tr>")
+                continue
+            tds = tr.find_all("td", recursive=False)
+            if len(tds) < self.EXPECTED_COLUMNS:
+                problems.append(
+                    f"{suite_url}: в найденной строке {len(tds)} td, "
+                    f"ожидали {self.EXPECTED_COLUMNS}"
+                )
+                continue
+
+            self._set_suite_url_cell(tds[self.SUITE_URL_COLUMN_INDEX], suite_url)
+            mapping_td = tds[self.MAPPING_COLUMN_INDEX]
+            mapping_td.clear()
+            mapping_td.append(self._build_inner_mapping_table(rows))
+
+        if problems:
+            raise ConfluencePageNotFoundException(
+                "Не удалось обновить строки на странице:\n"
+                + "\n".join(f"  - {p}" for p in problems)
+            )
+
+        return str(self.soup)
+
+    @staticmethod
+    def _collect_doc_urls(rows: List[Dict[str, Any]]) -> List[str]:
+        """Все непустые URL из links[] всех кейсов группы — без дублей, в исходном порядке."""
+        seen: set = set()
+        out: List[str] = []
+        for r in rows:
+            for link in (r.get("doc_links") or []):
+                url = (link or {}).get("url") or ""
+                if url and url not in seen:
+                    seen.add(url)
+                    out.append(url)
+        return out
+
+    def _find_anchor_by_url(self, target_url: str):
+        """
+        Ищет <a> с href = target_url. Сравнение умеет в относительные пути:
+        href='/pages/viewpage.action?pageId=X' матчится с
+        target_url='https://confluence.nexign.com/pages/viewpage.action?pageId=X'.
+        """
+        target_pq = self._path_with_query(target_url)
+        matcher: Callable[[Optional[str]], bool] = lambda href: bool(
+            href and (href == target_url or self._path_with_query(href) == target_pq)
+        )
+        return self.soup.find("a", href=matcher)
+
+    @staticmethod
+    def _path_with_query(url: str) -> str:
+        parsed = urlparse(url)
+        if parsed.query:
+            return f"{parsed.path}?{parsed.query}"
+        return parsed.path
+
+    def _set_suite_url_cell(self, td, suite_url: str) -> None:
+        """Заменяет содержимое td на одну ссылку на suite_url."""
+        td.clear()
+        a = self.soup.new_tag("a", href=suite_url)
+        a.string = suite_url
+        td.append(a)
+
+    def _build_inner_mapping_table(self, rows: List[Dict[str, Any]]):
+        """Вложенная таблица: Тэг | Требование из ГФС | Ссылка на тест-кейс."""
+        soup = self.soup
+        inner_table = soup.new_tag("table", **{"class": "wrapped confluenceTable"})
+        inner_tbody = soup.new_tag("tbody")
+
+        inner_header_tr = soup.new_tag("tr")
+        for inner_col in ("Тэг", "Требование из ГФС", "Ссылка на тест-кейс"):
             th = soup.new_tag("th", **{"class": "confluenceTh"})
-            th.string = col
-            header_tr.append(th)
-        tbody.append(header_tr)
+            th.string = inner_col
+            inner_header_tr.append(th)
+        inner_tbody.append(inner_header_tr)
 
-        grouped = self._group_by_feature(mapping_rows)
-        for feature_key, rows in grouped.items():
-            first = rows[0]
-            feature = first.get("feature") or {}
-            tr = soup.new_tag("tr")
+        for row in rows:
+            inner_tr = soup.new_tag("tr")
 
-            # 1. Фича — ссылка на link.url с текстом feature.key.
-            td_feature = soup.new_tag("td", **{"class": "confluenceTd"})
-            if feature.get("url"):
-                a = soup.new_tag("a", href=feature["url"])
-                a.string = feature.get("key") or feature.get("name") or "—"
-                td_feature.append(a)
+            td_tag = soup.new_tag("td", **{"class": "confluenceTd"})
+            td_tag.string = row.get("tag", "")
+            inner_tr.append(td_tag)
+
+            td_req = soup.new_tag("td", **{"class": "confluenceTd"})
+            td_req.string = row.get("requirement", "—")
+            inner_tr.append(td_req)
+
+            td_case = soup.new_tag("td", **{"class": "confluenceTd"})
+            tc_url = row.get("test_case_url")
+            if tc_url:
+                a = soup.new_tag("a", href=tc_url)
+                a.string = str(row.get("test_case_id", ""))
+                td_case.append(a)
             else:
-                td_feature.string = feature.get("key", "—")
-            tr.append(td_feature)
+                td_case.string = str(row.get("test_case_id", ""))
+            inner_tr.append(td_case)
 
-            # 2. Ссылка на документацию КР/ГФС — все doc_links из первого кейса.
-            td_doc = soup.new_tag("td", **{"class": "confluenceTd"})
-            for i, link in enumerate(first.get("doc_links") or []):
-                if i > 0:
-                    td_doc.append(soup.new_tag("br"))
-                a = soup.new_tag("a", href=link.get("url", ""))
-                a.string = link.get("name") or link.get("url") or ""
-                td_doc.append(a)
-            tr.append(td_doc)
-
-            # 3. Автор документации — пусто (нет в API кейса).
-            tr.append(soup.new_tag("td", **{"class": "confluenceTd"}))
-
-            # 4. Ссылка на тест-кейсы в Allure — исходный --suite_url (не per-case).
-            td_suite = soup.new_tag("td", **{"class": "confluenceTd"})
-            suite_url = first.get("suite_url", "")
-            if suite_url:
-                a = soup.new_tag("a", href=suite_url)
-                a.string = suite_url
-                td_suite.append(a)
-            tr.append(td_suite)
-
-            # 5. Автор тест-кейсов — все уникальные owner'ы фичи.
-            td_owner = soup.new_tag("td", **{"class": "confluenceTd"})
-            owners = sorted({r.get("owner", "") for r in rows if r.get("owner")})
-            td_owner.string = ", ".join(owners) if owners else ""
-            tr.append(td_owner)
-
-            # 6. Статус — статус кейсов фичи (через запятую, если разные).
-            td_status = soup.new_tag("td", **{"class": "confluenceTd"})
-            statuses = sorted({r.get("status", "") for r in rows if r.get("status")})
-            td_status.string = ", ".join(statuses) if statuses else ""
-            tr.append(td_status)
-
-            # 7. Маппинг (вложенная таблица: Тэг | Требование из ГФС | Ссылка на тест-кейс).
-            td_mapping = soup.new_tag("td", **{"class": "confluenceTd"})
-            inner_table = soup.new_tag("table", **{"class": "wrapped confluenceTable"})
-            inner_tbody = soup.new_tag("tbody")
-            inner_header_tr = soup.new_tag("tr")
-            for inner_col in ("Тэг", "Требование из ГФС", "Ссылка на тест-кейс"):
-                th = soup.new_tag("th", **{"class": "confluenceTh"})
-                th.string = inner_col
-                inner_header_tr.append(th)
-            inner_tbody.append(inner_header_tr)
-
-            for row in rows:
-                inner_tr = soup.new_tag("tr")
-
-                td_tag = soup.new_tag("td", **{"class": "confluenceTd"})
-                td_tag.string = row.get("tag", "")
-                inner_tr.append(td_tag)
-
-                td_req = soup.new_tag("td", **{"class": "confluenceTd"})
-                td_req.string = row.get("requirement", "—")
-                inner_tr.append(td_req)
-
-                td_case = soup.new_tag("td", **{"class": "confluenceTd"})
-                tc_url = row.get("test_case_url")
-                if tc_url:
-                    a = soup.new_tag("a", href=tc_url)
-                    a.string = str(row.get("test_case_id", ""))
-                    td_case.append(a)
-                else:
-                    td_case.string = str(row.get("test_case_id", ""))
-                inner_tr.append(td_case)
-                inner_tbody.append(inner_tr)
-            inner_table.append(inner_tbody)
-            td_mapping.append(inner_table)
-            tr.append(td_mapping)
-
-            tbody.append(tr)
-
-        table.append(tbody)
-        root.append(table)
-        return str(root)
+            inner_tbody.append(inner_tr)
+        inner_table.append(inner_tbody)
+        return inner_table
 
     def update(self, new_body_html: str) -> Dict[str, Any]:
         """Заменяет тело страницы на new_body_html (заголовок не трогаем)."""
