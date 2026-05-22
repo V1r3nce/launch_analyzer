@@ -113,12 +113,12 @@ class MappingConfluencePage:
             td_status.string = ", ".join(statuses) if statuses else ""
             tr.append(td_status)
 
-            # 7. Маппинг (вложенная таблица: Требование из ГФС | Ссылка на тест-кейс).
+            # 7. Маппинг (вложенная таблица: Тэг | Требование из ГФС | Ссылка на тест-кейс).
             td_mapping = soup.new_tag("td", **{"class": "confluenceTd"})
             inner_table = soup.new_tag("table", **{"class": "wrapped confluenceTable"})
             inner_tbody = soup.new_tag("tbody")
             inner_header_tr = soup.new_tag("tr")
-            for inner_col in ("Требование из ГФС", "Ссылка на тест-кейс"):
+            for inner_col in ("Тэг", "Требование из ГФС", "Ссылка на тест-кейс"):
                 th = soup.new_tag("th", **{"class": "confluenceTh"})
                 th.string = inner_col
                 inner_header_tr.append(th)
@@ -127,10 +127,12 @@ class MappingConfluencePage:
             for row in rows:
                 inner_tr = soup.new_tag("tr")
 
+                td_tag = soup.new_tag("td", **{"class": "confluenceTd"})
+                td_tag.string = row.get("tag", "")
+                inner_tr.append(td_tag)
+
                 td_req = soup.new_tag("td", **{"class": "confluenceTd"})
-                req_text = row.get("requirement", "—")
-                tag_text = row.get("tag", "")
-                td_req.string = f"({tag_text}) {req_text}" if tag_text else req_text
+                td_req.string = row.get("requirement", "—")
                 inner_tr.append(td_req)
 
                 td_case = soup.new_tag("td", **{"class": "confluenceTd"})
