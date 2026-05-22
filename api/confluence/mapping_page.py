@@ -97,30 +97,50 @@ class MappingConfluencePage:
 
         return str(self.soup)
 
-    @staticmethod
-    def _collect_doc_urls(rows: List[Dict[str, Any]]) -> List[str]:
-        """Все непустые URL из links[] всех кейсов группы — без дублей, в исходном порядке."""
+    def _collect_doc_urls(self, rows: List[Dict[str, Any]]) -> List[str]:
+        """
+        Все непустые URL из links[] всех кейсов группы — без дублей, в исходном порядке.
+        Оставляем только URL'ы из домена Confluence (см. CONFLUENCE_URL),
+        чтобы не словить случайный Allure-cross-ref или Jira-линк.
+        """
+        confluence_host = urlparse(self.CONFLUENCE_URL).netloc.lower()
         seen: set = set()
         out: List[str] = []
         for r in rows:
             for link in (r.get("doc_links") or []):
                 url = (link or {}).get("url") or ""
-                if url and url not in seen:
-                    seen.add(url)
-                    out.append(url)
+                if not url:
+                    continue
+                host = urlparse(url).netloc.lower()
+                if host and host != confluence_host:
+                    continue  # не Confluence — не док
+                if url in seen:
+                    continue
+                seen.add(url)
+                out.append(url)
         return out
 
     def _find_anchor_by_url(self, target_url: str):
         """
-        Ищет <a> с href = target_url. Сравнение умеет в относительные пути:
+        Ищет <a> с href = target_url, чей родительский <tr> имеет EXPECTED_COLUMNS td.
+        Сравнение умеет в относительные пути и игнорирует фрагмент (#anchor):
         href='/pages/viewpage.action?pageId=X' матчится с
-        target_url='https://confluence.nexign.com/pages/viewpage.action?pageId=X'.
+        target_url='https://confluence.nexign.com/pages/viewpage.action?pageId=X#section'.
+
+        Любые матчи внутри вложенных таблиц (где tr — 2 td) пропускаем.
         """
         target_pq = self._path_with_query(target_url)
         matcher: Callable[[Optional[str]], bool] = lambda href: bool(
             href and (href == target_url or self._path_with_query(href) == target_pq)
         )
-        return self.soup.find("a", href=matcher)
+        for a in self.soup.find_all("a", href=matcher):
+            tr = a.find_parent("tr")
+            if tr is None:
+                continue
+            tds = tr.find_all("td", recursive=False)
+            if len(tds) >= self.EXPECTED_COLUMNS:
+                return a
+        return None
 
     @staticmethod
     def _path_with_query(url: str) -> str:
