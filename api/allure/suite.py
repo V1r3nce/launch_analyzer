@@ -108,7 +108,7 @@ class AllureSuite:
         Тэг парсим из имени кейса; поле tags[] из API игнорируем.
         """
         cases = self.list_test_cases()
-        out: List[Dict[str, Any]] = []
+        result: List[Dict[str, Any]] = []
         for case in cases:
             tc_id = case.get("id")
             if not tc_id:
@@ -116,7 +116,7 @@ class AllureSuite:
             overview = self.get_test_case_overview(tc_id)
             name = overview.get("name") or ""
             tag, requirement = split_tag_and_requirement(name)
-            out.append({
+            result.append({
                 "test_case_id": tc_id,
                 "test_case_name": name,
                 "test_case_url": (
@@ -131,4 +131,4 @@ class AllureSuite:
                 "owner": _owner_from_members(overview.get("members") or []),
                 "doc_links": overview.get("links") or [],
             })
-        return out
+        return result
