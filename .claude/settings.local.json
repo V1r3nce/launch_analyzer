@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cmd /c dir \"C:\\\\Users\\\\Andrey\\\\PycharmProjects\\\\mapping\\\\launch_analyzer-master\\\\доп инфа\")",
-      "PowerShell($path = \"C:\\\\Users\\\\Andrey\\\\PycharmProjects\\\\mapping\\\\launch_analyzer-master\"; Get-ChildItem -LiteralPath $path | ForEach-Object { Write-Output \"$\\($_.Mode\\) $\\($_.Name\\)\" })"
-    ]
-  }
-}

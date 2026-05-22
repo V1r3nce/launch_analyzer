@@ -35,7 +35,4 @@ python scripts/confluence/mapping_to_confluence.py \
 ```
 
 После успешного запуска тело страницы Confluence заменяется, в браузере ничего нажимать не нужно.
-
-.\.venv\Scripts\python.exe scripts/confluence/mapping_to_confluence.py `
-    --parent_id 860817105 `
-    --suite_url "https://allure.nexign.com/project/313/test-cases/836208?treeId=811&from=WzExNTUyN10%3D"****
+****
