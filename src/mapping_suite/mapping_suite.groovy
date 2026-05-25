@@ -65,7 +65,7 @@ pipeline {
         stage ('Get Mapping Suite') {
             steps {
                 echo '--- Get Mapping Suite ---'
-                git branch: 'master', credentialsId: 'mops_ssh', url: "ssh://git@gitlab.nexign.com:2222/products/uds/mapping.git"
+                git branch: 'master', credentialsId: 'mops_ssh', url: "ssh://git@gitlab.nexign.com:2222/products/uds/suite-mapping.git"
             }
         }
         stage("Run script") {
