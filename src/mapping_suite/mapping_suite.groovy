@@ -94,19 +94,24 @@ pipeline {
                             currentBuild.result = 'FAILURE'
                             error("At least one SUITE_URL is necessary")
                         }
-                        def suite_lines = suite_urls.collect { "--suite_url '${it}'" }.join(' ')
+                        def suite_lines = suite_urls
+                                .collect { "--suite_url '" + it.replace("'", "'\\''") + "'" }
+                                .join(' ')
 
                         def exitCodeCore  = sh (
                             label: "Run core script",
                             returnStatus: true,
                             script: """
-                                /bin/bash -c 'set -o pipefail; \
-                                export PYTHONPATH=${WORKSPACE} && \
-                                python ${WORKSPACE}/scripts/confluence/mapping_to_confluence.py \
-                                --parent_id ${params.CONFLUENCE_PARENT_PAGE_ID.trim()} \
-                                ${suite_lines}'
-                            """
+export PYTHONPATH=${WORKSPACE}
+python ${WORKSPACE}/scripts/confluence/mapping_to_confluence.py \\
+    --parent_id ${params.CONFLUENCE_PARENT_PAGE_ID.trim()} \\
+    ${suite_lines}
+"""
                         )
+                        if (exitCodeCore != 0) {
+                            currentBuild.result = 'FAILURE'
+                            error("mapping_to_confluence.py failed with exit code ${exitCodeCore}")
+                        }
                     }
                 }
             }
